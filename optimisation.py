@@ -2,18 +2,20 @@ import pandas as pd
 from pyomo.opt import SolverFactory
 import pyomo.environ as pe
 import numpy as np
-
-trained = pd.read_csv('data/train.csv')
-
+import os
 
 
 class galaxy_optim:
     
     def __init__(self, ml_model_output, max_sum_energy=50000, max_energy=100, low_existence_expectancy_treshhold=0.7, min_low_index_percent_allocatio=0.1) :
         
-        ml_model_output.index =  ml_model_output.apply(lambda x : '_'.join([str(x["galactic year"]), str(x["galaxy"])]), axis=1).to_list()
+        self.problem_solved = False
+        self.pred = ml_model_output["y"]
+
+        self.index = ml_model_output.apply(lambda x : '_'.join([str(x["galactic year"]), str(x["galaxy"])]), axis=1)
+        ml_model_output.index =  self.index
         ml_model_output["low_existence_expectancy"] = (ml_model_output["existence expectancy index"] <= low_existence_expectancy_treshhold).astype(int)
-        ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: np.log(x + 0.01) + 3)
+        ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: -np.log(x + 0.01) + 3)
         
         
         self.m = pe.ConcreteModel()
@@ -55,14 +57,32 @@ class galaxy_optim:
         self.m.low_index_constraint = pe.Constraint(rule = lambda model : sum( model.low_existence_expectancy[g] * model.energy[g] for g in model.galaxy) >= \
             sum(model.energy[g] for g in model.galaxy) * model.min_low_index_percent_allocation)
 
+        # potential for emprovements is limited
+        self.m.limited_encrese_constraint = pe.Constraint(self.m.galaxy, rule = lambda model, g : likely_index_increase(model, g) <= model.potential_encrease[g])
+
+
+
         #Objective function
-        self.m.OBJ = pe.Objective(self.m.galaxy, rule = lambda model, g : likely_index_increase(model, g), sense=pe.maximize)
+        self.m.OBJ = pe.Objective(rule=lambda model : sum(likely_index_increase(model, g) for g in model.galaxy), sense=pe.maximize)
 
 
-    def solve(self,):
+    def solve(self):
         opt = SolverFactory('glpk')
-        opt.solve(self.m) 
+        opt.solve(self.m).write()
+        self.problem_solved = True
 
 
-optim = galaxy_optim(trained)
-optim.solve()
+    def prepare_output_file(self, csv_path='', submit_name='submit'):
+        assert self.problem_solved, "Перед выгрузкой результатов Вам надо запустить метод solve"
+        out = pd.DataFrame({"pred" : self.pred, "opt_pred" : self.index.apply(lambda x: self.m.energy[x].value)})
+        path_out = os.path.join(csv_path, submit_name + '.csv')
+        out.to_csv(path_out)
+        return out
+
+
+if __name__ == '__main__':
+    train = pd.read_csv('data/train.csv')
+    opt = galaxy_optim(train)
+    opt.solve()
+    results = opt.prepare_output_file()
+    print(results)
