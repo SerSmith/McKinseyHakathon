@@ -3,21 +3,23 @@ import pandas as pd
 from pyomo.opt import SolverFactory
 import pyomo.environ as pe
 import numpy as np
-
+import swifter
 
 
 class galaxy_optim:
 
+
+
     def __init__(self, ml_model_output, max_sum_energy=50000, max_energy=100, low_existence_expectancy_treshhold=0.7, min_low_index_percent_allocation=0.1):
+
+        ml_model_output = self.__add_probs(ml_model_output, low_existence_expectancy_treshhold)
 
         self.problem_solved = False
         self.pred = ml_model_output["y"]
-
         self.index = ml_model_output.apply(lambda x: '_'.join([str(x["galactic year"]), str(x["galaxy"])]), axis=1)
         ml_model_output.index = self.index
-        ml_model_output["low_existence_expectancy"] = (ml_model_output["existence expectancy index"] <= low_existence_expectancy_treshhold).astype(int)
         self.low_existence_expectancy = ml_model_output["low_existence_expectancy"]
-        ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: -np.log(x + 0.01) + 3)
+       
         # ml_model_output.to_excel('tmp.xlsx')
 
         self.m = pe.ConcreteModel()
@@ -63,8 +65,37 @@ class galaxy_optim:
 
 
 
-        #Objective function
+        # Vanila Objective function
+        # self.m.OBJ = pe.Objective(rule=lambda model: sum(likely_index_increase(model, g) for g in model.galaxy), sense=pe.maximize)
         self.m.OBJ = pe.Objective(rule=lambda model: sum(likely_index_increase(model, g) for g in model.galaxy), sense=pe.maximize)
+ 
+ 
+
+    def __add_probs(self, ml_model_output, y_prob_numpy, y_numpy, low_existence_expectancy_treshhold):
+
+        galaxy_quant = y_prob_numpy.shape[0]
+        assert galaxy_quant == ml_model_output.shape[0], "Количество наблюдений должно совпадать"
+        assert y_prob_numpy.sum(axis=1) == np.ones_like(y_prob_numpy), "Вероятности должны давать в сумме 1 для каждой галактики"
+        assert y_numpy.shape[1] == y_prob_numpy[1], "Размерность должна совпадать"
+
+        ml_model_output["low_existence_expectancy"] = (ml_model_output["existence expectancy index"] <= low_existence_expectancy_treshhold).astype(int)
+        ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: -np.log(x + 0.01) + 3)
+
+        calculate_encrease = lambda y: ((-np.log(y + 0.01) + 3) ** 2)/1000
+
+        index_increase = np.vectorize(calculate_encrease)(y_numpy)
+
+        y_prob_numpy = y_prob_numpy[:, index_increase.argsort()]
+
+        self.probs = np.zeros([y_prob_numpy.shape[0], y_prob_numpy.shape[0]])
+
+        for i in range(galaxy_quant):
+            for j in range(galaxy_quant):
+                for k in range(y_prob_numpy.shape[1]):
+                    self.probs[i][j] += y_prob_numpy[i][k] * np.sum(y_prob_numpy[j][k+1:])
+
+
+        return ml_model_output
 
 
     def solve(self):
@@ -76,8 +107,9 @@ class galaxy_optim:
     def prepare_output_file(self, csv_path='', submit_name='submit'):
         assert self.problem_solved, "Перед выгрузкой результатов Вам надо запустить метод solve"
         out = pd.DataFrame({"pred" : self.pred, "opt_pred" : self.index.apply(lambda x: self.m.energy[x].value)})
+        out.reset_index(inplace=True)
         path_out = os.path.join(csv_path, submit_name + '.csv')
-        out.to_csv(path_out)
+        out.to_csv(path_out, index=False)
         return out
 
     def check_optim_results(self):

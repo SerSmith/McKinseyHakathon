@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from collections import defaultdict
-
+import re
 
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
     edge_right= defaultdict()
@@ -95,15 +95,19 @@ def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 
             df_train.loc[index_train, column] = df_train.loc[index_train, column].fillna(mean_value)            
             df_test.loc[index_test, column] =  df_test.loc[index_test, column].fillna(mean_value)
     galaxy_train = df_train['galaxy'].unique()
-    galaxy_test = df_test['galaxy'].unique()   
+    galaxy_test = df_test['galaxy'].unique()
     # Получим колонки - galaxy_del, которые нужно выкинуть из train, так как их не будет в тесте
     galaxy_del = list(set(galaxy_train)- set(galaxy_test))
     galaxy_del = ['galaxy_' + name for name in galaxy_del] 
     # one hot encoding переменной galaxy
     df_train = pd.get_dummies(df_train, columns=['galaxy'])
     df_test = pd.get_dummies(df_test, columns=['galaxy'])
-    df_train = df_train.drop(galaxy_del, axis =1)
+    df_train = df_train.drop(galaxy_del, axis=1)
     
     df_train, df_test, edge_right, edge_left = my_add_feature(df_train, df_test, columns, fill_value, coeff, num_k)
     df_train, df_test = fillna(df_train, df_test, columns, fill_value)
+
+    df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
+    df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
+
     return df_train, df_test
