@@ -5,7 +5,7 @@ from scipy import stats
 
 def train_model(df_train, percent_val=0.2):
     X_train, X_test, y_train, y_test = train_test_split(df_train.drop('y', axis=1), df_train['y'], test_size=percent_val)
-    gbm = lgb.LGBMRegressor(objective='regression',max_depth=5, num_leaves=26, learning_rate=0.060, colsample_bytree=0.800,
+    gbm = lgb.LGBMRegressor(objective='rmse',max_depth=5, num_leaves=26, learning_rate=0.060, colsample_bytree=0.800,
                             subsample=0.968, n_estimators=451)
     gbm.fit(X_train, y_train,
         eval_set=[(X_test, y_test)],
