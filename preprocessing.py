@@ -96,6 +96,8 @@ def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 
             df_test.loc[index_test, column] =  df_test.loc[index_test, column].fillna(mean_value)
     galaxy_train = df_train['galaxy'].unique()
     galaxy_test = df_test['galaxy'].unique()
+    df_train_galaxy = df_train['galaxy']
+    df_test_galaxy = df_test['galaxy']
     # Получим колонки - galaxy_del, которые нужно выкинуть из train, так как их не будет в тесте
     galaxy_del = list(set(galaxy_train)- set(galaxy_test))
     galaxy_del = ['galaxy_' + name for name in galaxy_del] 
@@ -106,7 +108,8 @@ def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 
     
     df_train, df_test, edge_right, edge_left = my_add_feature(df_train, df_test, columns, fill_value, coeff, num_k)
     df_train, df_test = fillna(df_train, df_test, columns, fill_value)
-
+    df_train['galaxy'] = df_train_galaxy
+    df_test['galaxy'] = df_test_galaxy
     df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
     df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
 
