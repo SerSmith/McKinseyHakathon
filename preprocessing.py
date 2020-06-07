@@ -87,11 +87,18 @@ def fillna(df_train, df_test, columns, value):
 def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 7):
                       
     columns = [i for i in df_test.columns if i not in ['galaxy']]
+    for galaxy in df_train.galaxy.unique():
+        index_train = df_train[df_train.galaxy == galaxy].index
+        index_test = df_test[df_test.galaxy == galaxy].index
+        for column in columns:
+            mean_value = np.mean(df_train.loc[index_train,column])
+            df_train.loc[index_train, column] = df_train.loc[index_train, column].fillna(mean_value)            
+            df_test.loc[index_test, column] =  df_test.loc[index_test, column].fillna(mean_value)
     galaxy_train = df_train['galaxy'].unique()
     galaxy_test = df_test['galaxy'].unique()
     # Получим колонки - galaxy_del, которые нужно выкинуть из train, так как их не будет в тесте
     galaxy_del = list(set(galaxy_train)- set(galaxy_test))
-    galaxy_del = ['galaxy_'+name for name in galaxy_del] 
+    galaxy_del = ['galaxy_' + name for name in galaxy_del] 
     # one hot encoding переменной galaxy
     df_train = pd.get_dummies(df_train, columns=['galaxy'])
     df_test = pd.get_dummies(df_test, columns=['galaxy'])
