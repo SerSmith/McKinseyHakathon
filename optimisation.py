@@ -40,6 +40,7 @@ class galaxy_optim:
         
         self.probs = add_probs(y_prob_numpy, y_numpy)
         self.percents = [stats.norm(min(max_sum_energy, max_energy*galaxy_quant)/max_energy, deviation * galaxy_quant).cdf(x) for x in np.array(self.probs).sum(axis=0)]
+        pd.DataFrame(self.percents).to_excel('percents.xlsx')
 
         ml_model_output["percent"] = self.percents
         self.problem_solved = False
@@ -81,14 +82,14 @@ class galaxy_optim:
 
         #Constraints
         # in total there are 50000 zillion DSML available for allocation
-        self.m.max_sum_energy_constraint = pe.Constraint(rule=lambda model:sum(model.energy[g] for g in model.galaxy) <= model.max_sum_energy)
+        self.m.max_sum_energy_constraint = pe.Constraint(rule=lambda model: sum(model.energy[g] for g in model.galaxy) <= model.max_sum_energy)
 
         # no galaxy should be allocated more than 100 zillion DSML or less than 0 zillion DSML\
         self.m.max_energy_constraint = pe.Constraint(self.m.galaxy, rule=lambda model, g: model.energy[g] <= model.max_energy)
 
         # galaxies with low existence expectancy index below 0.7 should be allocated at least 10% of the total energy available
         self.m.low_index_constraint = pe.Constraint(rule=lambda model: sum(model.low_existence_expectancy[g] * model.energy[g] for g in model.galaxy) >= \
-            sum(model.energy[g] for g in model.galaxy) * model.min_low_index_percent_allocation)
+            (sum(model.energy[g] for g in model.galaxy) * model.min_low_index_percent_allocation))
 
         # potential for emprovements is limited
         self.m.limited_encrese_constraint = pe.Constraint(self.m.galaxy, rule=lambda model, g: likely_index_increase(model, g) <= model.potential_encrease[g])
@@ -103,7 +104,8 @@ class galaxy_optim:
     
     @staticmethod
     def __add_columns(ml_model_output, low_existence_expectancy_treshhold):
-        ml_model_output["low_existence_expectancy"] = (ml_model_output['existenceexpectancyatbirth'] <= low_existence_expectancy_treshhold).astype(int)
+        # Костыль убрать -10
+        ml_model_output["low_existence_expectancy"] = ((ml_model_output[ 'existenceexpectancyindex'] <= low_existence_expectancy_treshhold) & (ml_model_output[ 'existenceexpectancyindex'] != -10)).astype(int)
         ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: -np.log(x + 0.01) + 3)
         return ml_model_output
 
@@ -117,7 +119,7 @@ class galaxy_optim:
 
     def prepare_output_file(self, csv_path='', submit_name='submit'):
         assert self.problem_solved, "Перед выгрузкой результатов Вам надо запустить метод solve"
-        out = pd.DataFrame({"pred" : self.pred, "opt_pred" : self.index.apply(lambda x: self.m.energy[x].value)})
+        out = pd.DataFrame({"pred" : self.pred, "opt_pred" : self.index.apply(lambda x: np.round(self.m.energy[x].value, 4))})
         out.reset_index(inplace=True)
         path_out = os.path.join(csv_path, submit_name + '.csv')
         out.to_csv(path_out, index=False)
@@ -129,14 +131,14 @@ class galaxy_optim:
         energy_max = ser.max()
         energy_low_expect = np.sum(np.array(self.low_existence_expectancy) * np.array(ser).T)
         print(f"\n")
-        print(f"Целевая : {self.m.OBJ.expr}\n")
+        print(f"Целевая : {self.m.OBJ.value}\n")
         print(f"Сумма по общему кол-ву : {constraint_sum}\n")
         print(f"Максимальная затраченная энергия на галактику : {energy_max}\n")
         print(f"Процент энергии на короткоживущих планетах : {energy_low_expect/constraint_sum}\n")
 
-        assert constraint_sum <= 50000
-        assert energy_max <= 100
-        assert energy_low_expect/constraint_sum >= 0.1
+        assert np.round(constraint_sum, 4) <= 50000
+        assert np.round(energy_max, 4) <= 100
+        assert np.round(energy_low_expect/constraint_sum, 4) >= 0.1
 
 if __name__ == '__main__':
 
@@ -151,8 +153,8 @@ if __name__ == '__main__':
     with open('y_model.pkl', 'rb') as handle:
         y_model = pickle.load(handle)
 
-    opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model)
-    # opt = galaxy_optim(test_out, y_prob_model, y_model)
+    # opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model)
+    opt = galaxy_optim(test_out, y_prob_model, y_model)
     opt.solve()
     results = opt.prepare_output_file()
     opt.check_optim_results()
