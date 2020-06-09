@@ -3,11 +3,54 @@ import numpy as np
 from scipy import stats
 from collections import defaultdict
 import re
+from sklearn.linear_model import LinearRegression
+from tqdm import tqdm
+from collections import defaultdict
+
+class always_zero:
+    '''Класс - заглушка, возвращающая всегда 0
+    '''
+    def predict(self, x):
+        return np.zeros_like(x)
+
+def delete_trend(df_train, df_test):
+    models_dict=defaultdict(dict)
+    for column in tqdm(df_train.columns):
+        if column not in ['galactic year', 'galaxy']:
+            for galaxy in df_train['galaxy'].unique():
+                index_train = df_train[df_train.galaxy == galaxy].index
+                y = df_train.loc[index_train, column]
+                X = df_train.loc[index_train, 'galactic year'][y.notnull()].to_numpy().reshape(-1, 1)
+                y = y[y.notnull()].to_numpy().reshape(-1, 1)
+                if len(y):
+                    model = LinearRegression().fit(X, y)
+                else:
+                    model = always_zero()
+
+                models_dict[column][galaxy] = model
+
+                if len(y):
+                    trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+                    df_train.loc[index_train, column] = df_train.loc[index_train, column] - trend
+
+    for column in tqdm(df_test.columns):
+        if column not in ['galactic year', 'galaxy']:
+            for galaxy in df_test['galaxy'].unique():
+                index_test = df_test[df_test.galaxy == galaxy].index
+                y = df_test.loc[index_test, column]
+                X = df_test.loc[index_test, 'galactic year'][y.notnull()].to_numpy().reshape(-1, 1)
+                if len(X):
+                    trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+                    df_test.loc[index_test, column] =  trend
+        
+    return df_train, df_test, models_dict
 
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
     edge_right= defaultdict()
-    edge_left = defaultdict()    
+    edge_left = defaultdict()
+
     for column in columns:
+
         df_col = df_train[df_train[column].isnull()==False][[column,'y']]
         st = stats.binned_statistic(df_col[column], df_col['y'], statistic='mean', bins=20)
 
@@ -85,7 +128,12 @@ def fillna(df_train, df_test, columns, value):
 
 # Функция, которая объединяет в себе весь препроцессинг
 def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 7):
-                      
+    
+    df_train, df_test, models_dict = delete_trend(df_train, df_test)
+
+    # df_train.to_excel('tmp1.xlsx')
+    # df_test.to_excel('tmp2.xlsx')
+
     columns = [i for i in df_test.columns if i not in ['galaxy']]
     for galaxy in df_train.galaxy.unique():
         index_train = df_train[df_train.galaxy == galaxy].index
@@ -113,4 +161,30 @@ def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 
     df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
     df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
 
+    column = 'y'
+
+
+    for galaxy in df_train['galaxy'].unique():
+        index_train = df_train[df_train.galaxy == galaxy].index
+        y = df_train.loc[index_train, column]
+        X = df_train.loc[index_train, 'galactic year'][y.notnull()].to_numpy().reshape(-1, 1)
+        if y.shape[0]:
+            df_train.loc[index_train, 'y_trend'] = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+
+    
+    for galaxy in df_test['galaxy'].unique():
+        index_test = df_test[df_test.galaxy == galaxy].index
+        y = df_test.loc[index_test, column]
+        X = df_test.loc[index_test, 'galactic year'][y.notnull()].to_numpy().reshape(-1, 1)
+        if y.shape[0]:
+            df_test.loc[index_test, 'y_trend'] =  pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+
+
     return df_train, df_test
+
+if __name__ == '__main__':
+
+    train = pd.read_csv("data/train.csv")
+    test = pd.read_csv("data/test.csv")
+
+    train_upd, test_upd = preprocessing_all(train, test)
