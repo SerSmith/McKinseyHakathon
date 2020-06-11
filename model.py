@@ -104,7 +104,7 @@ def run_model_and_distrs(train, test, trend_y=True, percent_train=0.8, qunity_st
 
     mean_y = y_all.mean(axis=1)
 
-    possibal_points = [np.array(residuals_all) + res for res in y]
+    possibal_points = [np.array(residuals_all) + res for res in mean_y]
 
     kernels_all = []
 

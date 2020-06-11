@@ -39,7 +39,7 @@ class galaxy_optim:
         ml_model_output = self.__add_columns(ml_model_output, low_existence_expectancy_treshhold)
         
         self.probs = add_probs(y_prob_numpy, y_numpy)
-        self.percents = [stats.norm(min(max_sum_energy, max_energy*galaxy_quant)/max_energy, deviation * galaxy_quant).cdf(x) for x in np.array(self.probs).sum(axis=0)]
+        self.percents = [stats.norm(min(max_sum_energy, max_energy*galaxy_quant)/max_energy, np.sqrt(deviation * galaxy_quant)).cdf(x) for x in np.array(self.probs).sum(axis=0)]
         pd.DataFrame(self.percents).to_excel('percents.xlsx')
 
         ml_model_output["percent"] = self.percents
