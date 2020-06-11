@@ -16,7 +16,7 @@ class always_zero:
 def delete_trend(df_train, df_test):
     models_dict=defaultdict(dict)
     for column in tqdm(df_train.columns):
-        if column not in ['galactic year', 'galaxy', 'y']:
+        if column not in ['galactic year', 'galaxy']:
             for galaxy in df_train['galaxy'].unique():
                 index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
                 y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
