@@ -16,7 +16,7 @@ class always_zero:
 def delete_trend(df_train, df_test):
     models_dict=defaultdict(dict)
     for column in tqdm(df_train.columns):
-        if column not in ['galactic year', 'galaxy', 'y']:
+        if column not in ['galactic year', 'galaxy']:
             for galaxy in df_train['galaxy'].unique():
                 index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
                 y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
@@ -128,9 +128,10 @@ def fillna(df_train, df_test, columns, value):
     return df_train, df_test
 
 # Функция, которая объединяет в себе весь препроцессинг
-def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 7):
+def preprocessing_all(df_train, df_test, trend_features = True, trend_y = True, fill_value = -10, coeff = 0.2, num_k = 7):
     
-    df_train, df_test, models_dict = delete_trend(df_train, df_test)
+    if trend_features:
+        df_train, df_test, models_dict = delete_trend(df_train, df_test)
 
     # df_train.to_excel('tmp1.xlsx')
     # df_test.to_excel('tmp2.xlsx')
@@ -162,22 +163,23 @@ def preprocessing_all(df_train, df_test, fill_value = -10, coeff = 0.2, num_k = 
     df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
     df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
 
-    column = 'y'
+    if trend_y:
+        column = 'y'
 
-    for galaxy in df_train['galaxy'].unique():
-        index_train = df_train[(df_train.galaxy == galaxy)].index
-        X = df_train.loc[index_train, 'galacticyear'].to_numpy().reshape(-1, 1)
-        trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
-        trend.index = index_train
-        df_train.loc[index_train, 'y_trend'] = trend
+        for galaxy in df_train['galaxy'].unique():
+            index_train = df_train[(df_train.galaxy == galaxy)].index
+            X = df_train.loc[index_train, 'galacticyear'].to_numpy().reshape(-1, 1)
+            trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+            trend.index = index_train
+            df_train.loc[index_train, 'y_trend'] = trend
 
-    
-    for galaxy in df_test['galaxy'].unique():
-        index_test = df_test[df_test.galaxy == galaxy].index
-        X = df_test.loc[index_test, 'galacticyear'].to_numpy().reshape(-1, 1)
-        trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
-        trend.index = index_test
-        df_test.loc[index_test, 'y_trend'] = trend
+
+        for galaxy in df_test['galaxy'].unique():
+            index_test = df_test[df_test.galaxy == galaxy].index
+            X = df_test.loc[index_test, 'galacticyear'].to_numpy().reshape(-1, 1)
+            trend = pd.Series(models_dict[column][galaxy].predict(X).reshape(-1))
+            trend.index = index_test
+            df_test.loc[index_test, 'y_trend'] = trend
 
 
     return df_train, df_test
