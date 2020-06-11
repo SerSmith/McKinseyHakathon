@@ -4,14 +4,21 @@ import numpy as np
 from scipy import stats
 import optimisation
 
+
+
 def train_model(df_train, percent_val=0.2, y_model=None, previous_residuals=None, round_digits=None):
     X_train, X_test, y_train, y_test = train_test_split(df_train.drop('y', axis=1), df_train['y'], test_size=percent_val)
-    gbm = lgb.LGBMRegressor(objective='rmse',max_depth=5, num_leaves=26, learning_rate=0.060, colsample_bytree=0.800,
+    gbm = lgb.LGBMRegressor(objective='rmse', max_depth=5, num_leaves=26, learning_rate=0.060, colsample_bytree=0.800,
                             subsample=0.968, n_estimators=451)
-    gbm.fit(X_train, y_train,
-        eval_set=[(X_test, y_test)],
+    gbm.fit(X_train.drop(columns=['y_trend', 'galaxy']), y_train,
+        eval_set=[(X_test.drop(columns=['y_trend', 'galaxy']), y_test)],
         eval_metric='RMSE')
-    predict = gbm.predict(X_test)
+    predict = gbm.predict(X_test.drop(columns=['y_trend', 'galaxy']))
+
+    predict += X_test['y_trend']
+    y_train += X_train['y_trend']
+    y_test += X_test['y_trend']
+
 
     rank_diviation = None
 
@@ -71,7 +78,7 @@ def run_model_and_distrs(train, test, percent_val=0.2, qunity_starts=1, quantity
     y_all = np.zeros([test.shape[0], qunity_starts])
 
     for i, model_out in enumerate(model_all):
-        y = model_out.predict(test)
+        y = model_out.predict(test.drop(columns=['y_trend', 'galaxy'])) + test['y_trend']
         y_all[:, i] = y
 
     mean_y = y_all.mean(axis=1)
