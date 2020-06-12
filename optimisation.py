@@ -39,7 +39,7 @@ class galaxy_optim:
         ml_model_output = self.__add_columns(ml_model_output, low_existence_expectancy_treshhold)
         
         self.probs = add_probs(y_prob_numpy, y_numpy)
-        self.percents = [stats.norm(min(max_sum_energy, max_energy*galaxy_quant)/max_energy, np.sqrt(deviation * galaxy_quant)).cdf(x) for x in np.array(self.probs).sum(axis=0)]
+        self.percents = [stats.norm((max_energy*galaxy_quant- max_sum_energy)/max_energy, np.sqrt(deviation * galaxy_quant)).cdf(x) for x in np.array(self.probs).sum(axis=0)]
         pd.DataFrame(self.percents).to_excel('percents.xlsx')
 
         ml_model_output["percent"] = self.percents
@@ -82,7 +82,7 @@ class galaxy_optim:
 
         #Constraints
         # in total there are 50000 zillion DSML available for allocation
-        self.m.max_sum_energy_constraint = pe.Constraint(rule=lambda model: sum(model.energy[g] for g in model.galaxy) <= model.max_sum_energy)
+        self.m.max_sum_energy_constraint = pe.Constraint(rule=lambda model: sum(model.energy[g] for g in model.galaxy) <= model.max_sum_energy-0.1)
 
         # no galaxy should be allocated more than 100 zillion DSML or less than 0 zillion DSML\
         self.m.max_energy_constraint = pe.Constraint(self.m.galaxy, rule=lambda model, g: model.energy[g] <= model.max_energy)
@@ -153,8 +153,8 @@ if __name__ == '__main__':
     with open('y_model.pkl', 'rb') as handle:
         y_model = pickle.load(handle)
 
-    # opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model)
-    opt = galaxy_optim(test_out, y_prob_model, y_model)
+#     #opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model)
+    opt = galaxy_optim(test_out, y_prob_model, y_model,deviation=0.16498914930555555)
     opt.solve()
     results = opt.prepare_output_file()
     opt.check_optim_results()

@@ -5,19 +5,27 @@ from scipy import stats
 import optimisation
 import random
 
-def split_train_val(df_train, df_test, percent_train):
-    # Функция, которая разбивает выборку на трейн и валидацию (которая начаниется с минимального года из теста)
-    date_test_min = min(df_test.galacticyear)
-    k = int(df_train.shape[0] * percent_train)
-    df_train_new = df_train.loc[random.sample(list(df_train.index),k)]
-    df_val_new = df_train[df_train.galacticyear >= date_test_min]
-    return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
- 
+# def split_train_val(df_train, df_test, percent_train):
+#     # Функция, которая разбивает выборку на трейн и валидацию (которая начаниется с минимального года из теста)
+#     date_test_min = min(df_test.galacticyear)
+#     k = int(df_train.shape[0] * percent_train)
+#     df_train_new = df_train.loc[random.sample(list(df_train.index),k)]
+#     df_val_new = df_train[df_train.galacticyear >= date_test_min]
+#     return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
 
-def train_model(df_train, df_test, trend_y = True, percent_train=0.8, y_model=None, previous_residuals=None, round_digits=None):
-    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_train)
-    gbm = lgb.LGBMRegressor(objective='rmse', max_depth=5, num_leaves=26, learning_rate=0.060, colsample_bytree=0.800,
-                            subsample=0.968, n_estimators=451)
+def split_train_val(df_train, df_test, percent_val):
+    # Функция, которая честно разбивает выборку на трейн и валидацию (которая начаниется с минимального года из теста) валидация будет маленькой
+    date_test_min = min(df_test.galacticyear)
+    df_val = df_train[df_train.galacticyear >= date_test_min]
+    k = int(df_val.shape[0] * percent_val)
+    df_val_new = df_val.loc[random.sample(list(df_val.index),k)]
+    df_train_new = df_train[~df_train.index.isin(df_val_new.index)]
+    return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
+
+
+def train_model(df_train, df_test, trend_y = True, percent_val=0.1, y_model=None, previous_residuals=None, round_digits=None):
+    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val)
+    gbm = lgb.LGBMRegressor(objective='rmse', max_depth=12, num_leaves=23, learning_rate=0.010, colsample_bytree=0.800, subsample=0.803, n_estimators=250)
     print(X_train.shape, X_val.shape, min(X_val.galacticyear))
     if trend_y:
         columns=['y_trend','galaxy']
@@ -39,7 +47,7 @@ def train_model(df_train, df_test, trend_y = True, percent_train=0.8, y_model=No
 
     if previous_residuals is not None and y_model is not None and round_digits is not None:
 
-        possibal_points = [np.array(previous_residuals) + res for res in y_val]
+        possibal_points = [np.array(previous_residuals) + res for res in predict]
 
         kernels_all = []
 
@@ -70,7 +78,7 @@ def train_model(df_train, df_test, trend_y = True, percent_train=0.8, y_model=No
     return X_train, X_val, y_train, y_val, gbm, predict, rank_diviation
 
 
-def run_model_and_distrs(train, test, trend_y=True, percent_train=0.8, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
+def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
 
     previous_residuals = None
     residuals_all = []
@@ -82,7 +90,7 @@ def run_model_and_distrs(train, test, trend_y=True, percent_train=0.8, qunity_st
 
 
     for i in range(qunity_starts):
-        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model(train, test, trend_y, percent_train=percent_train, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
+        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model(train, test, trend_y, percent_val=percent_val, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
 
         residuals = [y - y_true for y, y_true in zip(list(y_validate), predict)]
         previous_residuals = residuals

@@ -46,6 +46,25 @@ def delete_trend(df_train, df_test):
         
     return df_train, df_test, models_dict
 
+def add_y_shift(df_train, df_test):
+    df_train_new = pd.DataFrame()
+    df_test_new = pd.DataFrame()
+    df_train['train'] = 1
+    df_test['train'] = 0
+    df_all = pd.concat([df_train,df_test])
+    for galactic in df_train.galaxy.unique():  
+        df_galactic = df_all[df_all.galaxy == galactic].sort_values(['galacticyear']).copy()
+        df_galactic = pd.concat([df_galactic, df_galactic['y'].shift(1)], axis=1)
+        df_galactic.columns = list(df_all.columns) + ['y_shift']
+        df_galactic['y_shift'].iloc[0] = np.mean(df_galactic.y_shift)
+        for i,j in enumerate(df_galactic.y_shift):
+            if np.isnan(j):
+                df_galactic['y_shift'].iloc[i] = df_galactic['y_shift'].iloc[i-1]
+        df_train_new = pd.concat([df_train_new, df_galactic[df_galactic.train == 1].drop(['train'], axis=1)], axis=0)
+        df_test_new = pd.concat([df_test_new, df_galactic[df_galactic.train == 0].drop(['train'], axis=1)], axis=0)
+    df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
+    return df_train_new, df_test_new
+
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
     edge_right= defaultdict()
     edge_left = defaultdict()
@@ -128,7 +147,7 @@ def fillna(df_train, df_test, columns, value):
     return df_train, df_test
 
 # Функция, которая объединяет в себе весь препроцессинг
-def preprocessing_all(df_train, df_test, trend_features = True, trend_y = True, fill_value = -10, coeff = 0.2, num_k = 7):
+def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False, fill_value = -10, coeff = 0.2, num_k = 7):
     
     if trend_features:
         df_train, df_test, models_dict = delete_trend(df_train, df_test)
@@ -160,9 +179,13 @@ def preprocessing_all(df_train, df_test, trend_features = True, trend_y = True, 
     df_train, df_test = fillna(df_train, df_test, columns, fill_value)
     df_train['galaxy'] = df_train_galaxy
     df_test['galaxy'] = df_test_galaxy
+
     df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
     df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
-
+    df_train, df_test = add_y_shift(df_train, df_test)
+    df_test.sort_index(inplace=True)
+    df_train.sort_index(inplace=True)
+    
     if trend_y:
         column = 'y'
 
