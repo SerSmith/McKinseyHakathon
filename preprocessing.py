@@ -13,6 +13,77 @@ class always_zero:
     def predict(self, x):
         return np.zeros_like(x)
 
+
+
+
+def preprocessing_add_epoch_statistics(train, test):
+    
+    
+    add_year_dummy = lambda year, num, p: True if year>=(990000 + num * p) and year<=(990000 + num * (p + 1)) else False
+
+    train['epoch'] = train['galactic year'].apply(lambda x: int((x-990000)/5000))
+
+    train['ten_years'] = train['galactic year'].apply(lambda x: int((x-990000 - int((x-990000)/5000)*5000)/1000))
+
+    columns = [i for i in test.columns if i not in ['galaxy']]
+
+
+    # for galaxy in tqdm(train['galaxy'].unique()):
+    #     for i in range(5):
+    #         train["galactic year group " + str(i)+' '+galaxy] = train[['galaxy', 'galactic year']].apply(lambda x: add_year_dummy(x['galactic year'], i, 5000) if x['galaxy'] == galaxy else 0, axis=1)
+
+    #     index_train = train[train.galaxy == galaxy].index
+
+    #     for column in columns:
+    #         mean_value = np.mean(train.loc[index_train,column]) or np.mean(train.loc[:,column]) or 0
+    #         train.loc[index_train, column] = train.loc[index_train, column].fillna(mean_value)
+
+
+    train = pd.concat([train, pd.get_dummies(train['epoch'], drop_first=True)], axis=1)
+
+    # train_group = train[['epoch', 'galaxy', 'y']].groupby(['epoch', 'galaxy'])
+    
+    # mean_epoch_train = train_group.mean().reset_index().rename(columns={'y': 'y_mean'})
+    # train = train.merge(mean_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'])
+
+    # max_epoch_train = train_group.max().reset_index().rename(columns={'y': 'y_max'})
+    # train = train.merge(max_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'])
+
+    # min_epoch_train = train_group.min().reset_index().rename(columns={'y': 'y_min'})
+    # train = train.merge(min_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'])
+
+    # std_epoch_train = train_group.std().reset_index().rename(columns={'y': 'y_std'})
+    # train = train.merge(std_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'])
+
+
+    # for galaxy in tqdm(test['galaxy'].unique()):
+    #     for i in range(5):
+    #         # test["galactic year group " + str(i)+' '+galaxy] = test[['galaxy', 'galactic year']].apply(lambda x: add_year_dummy(x['galactic year'], i, 5000) if x['galaxy'] == galaxy else 0, axis=1)
+        
+
+    #     index_test = test[test.galaxy == galaxy].index
+    #     index_train = train[train.galaxy == galaxy].index
+
+    #     for column in columns:
+    #         mean_value = np.mean(train.loc[index_train,column]) or np.mean(train.loc[:, column]) or 0
+    #         test.loc[index_test, column] = test.loc[index_test, column].fillna(mean_value)
+
+    test['epoch'] = test['galactic year'].apply(lambda x: int((x-990000)/5000))
+    test['ten_years'] = test['galactic year'].apply(lambda x: int((x-990000 - int((x-990000)/5000)*5000)/1000))
+    test = pd.concat([test, pd.get_dummies(test['epoch'], drop_first=True)], axis=1)
+
+
+    # test = test.merge(mean_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'], how='left')
+
+    # test = test.merge(max_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'], how='left')
+
+    # test = test.merge(min_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'], how='left')
+
+    # test = test.merge(std_epoch_train, left_on=['epoch', 'galaxy'], right_on=['epoch', 'galaxy'], how='left')
+    # Оставим толь колонки которые есть в тесте
+    train = train.loc[:, list(test.columns) + ['y']]
+    return train, test
+
 def delete_trend(df_train, df_test):
     models_dict=defaultdict(dict)
     for column in tqdm(df_train.columns):
@@ -46,6 +117,9 @@ def delete_trend(df_train, df_test):
         
     return df_train, df_test, models_dict
 
+
+
+
 def add_y_shift(df_train, df_test):
     df_train_new = pd.DataFrame()
     df_test_new = pd.DataFrame()
@@ -63,7 +137,7 @@ def add_y_shift(df_train, df_test):
         df_train_new = pd.concat([df_train_new, df_galactic[df_galactic.train == 1].drop(['train'], axis=1)], axis=0)
         df_test_new = pd.concat([df_test_new, df_galactic[df_galactic.train == 0].drop(['train'], axis=1)], axis=0)
     df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
-    return df_train_new, df_test_new
+    return df_train_new, df_test_new.drop('y', axis=1)
 
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
     edge_right= defaultdict()
@@ -149,6 +223,8 @@ def fillna(df_train, df_test, columns, value):
 # Функция, которая объединяет в себе весь препроцессинг
 def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False, fill_value = -10, coeff = 0.2, num_k = 7):
     
+    true_existence_expectancy_index = df_test['existence expectancy index']
+
     if trend_features:
         df_train, df_test, models_dict = delete_trend(df_train, df_test)
 
@@ -176,16 +252,15 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
     df_train = df_train.drop(galaxy_del, axis=1)
     
     df_train, df_test, edge_right, edge_left = my_add_feature(df_train, df_test, columns, fill_value, coeff, num_k)
-    df_train, df_test = fillna(df_train, df_test, columns, fill_value)
+
     df_train['galaxy'] = df_train_galaxy
     df_test['galaxy'] = df_test_galaxy
 
-    df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
-    df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', x))
-    df_train, df_test = add_y_shift(df_train, df_test)
-    df_test.sort_index(inplace=True)
-    df_train.sort_index(inplace=True)
-    
+
+
+    df_train, df_test = preprocessing_add_epoch_statistics(df_train, df_test)
+    df_train, df_test = fillna(df_train, df_test, columns, fill_value)
+
     if trend_y:
         column = 'y'
 
@@ -204,12 +279,20 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
             trend.index = index_test
             df_test.loc[index_test, 'y_trend'] = trend
 
+    df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
+    df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
+    df_train, df_test = add_y_shift(df_train, df_test)
+    df_test.sort_index(inplace=True)
+    df_train.sort_index(inplace=True)
+    
+    df_train, df_test = fillna(df_train, df_test, columns, fill_value)
 
-    return df_train, df_test
+    return df_train, df_test, true_existence_expectancy_index
 
 if __name__ == '__main__':
 
     train = pd.read_csv("data/train.csv")
     test = pd.read_csv("data/test.csv")
 
-    train_upd, test_upd = preprocessing_all(train, test)
+    # train_upd, test_upd = preprocessing_all(train, test)
+    preprocessing_add_epoch_statistics(train, test)
