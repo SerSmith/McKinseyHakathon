@@ -139,6 +139,53 @@ def add_y_shift(df_train, df_test):
     df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
     return df_train_new, df_test_new.drop('y', axis=1)
 
+def add_features_from_regression(df_train, df_test):
+    models_dict=defaultdict(dict)
+    column = 'y'
+    for column in tqdm(df_train.columns):
+        df_train[f'regres_{column}'] =  0
+        df_train[f'coef_regr_{column}'] = 0
+        df_train[f'inter_regr__{column}'] = 0
+        if column not in ['galactic year', 'galaxy']:
+            for galaxy in df_train['galaxy'].unique():
+                index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
+                y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
+                X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
+                df_train.loc[index_train, 'regression_y'] = np.mean(y)
+                if len(y):
+                    model = LinearRegression().fit(X, y)
+                else:
+                    model = always_zero()
+
+                models_dict[galaxy] = model
+
+                if len(y):
+                    index_train = df_train[df_train.galaxy == galaxy].index
+                    X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
+                    trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
+                    trend.index = index_train
+                    df_train.loc[index_train, f'regres_{column}'] =  trend
+                    df_train.loc[index_train, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000
+                    df_train.loc[index_train, f'inter_regr_{column}'] = models_dict[galaxy].intercept_[0]
+
+
+
+    for column in tqdm(df_test.columns):
+        df_test[f'regres_{column}'] =  0
+        df_test[f'coef_regr_{column}'] = 0
+        df_test[f'inter_regr__{column}'] = 0
+        if column not in ['galactic year', 'galaxy']:
+            for galaxy in df_train['galaxy'].unique():
+                index_test = df_test[df_test.galaxy == galaxy].index
+                X = df_test.loc[index_test, 'galactic year'].to_numpy().reshape(-1, 1)
+                if len(X):
+                    trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
+                    trend.index = index_test
+                    df_test.loc[index_test, f'regres_{column}'] =  trend
+                    df_test.loc[index_test, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000
+                    df_test.loc[index_test, f'inter_regr__{column}'] = models_dict[galaxy].intercept_[0]
+    return df_train, df_test 
+
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
     edge_right= defaultdict()
     edge_left = defaultdict()
@@ -230,7 +277,7 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
 
     # df_train.to_excel('tmp1.xlsx')
     # df_test.to_excel('tmp2.xlsx')
-
+    df_train, df_test = add_features_from_regression(df_train, df_test)
     columns = [i for i in df_test.columns if i not in ['galaxy']]
     for galaxy in df_train.galaxy.unique():
         index_train = df_train[df_train.galaxy == galaxy].index
