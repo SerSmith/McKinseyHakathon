@@ -25,7 +25,7 @@ def split_train_val(df_train, df_test, percent_val):
 
 def train_model(df_train, df_test, trend_y = True, percent_val=0.1, y_model=None, previous_residuals=None, round_digits=None):
     X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val)
-    gbm = lgb.LGBMRegressor(objective='rmse', max_depth=12, num_leaves=23, learning_rate=0.010, colsample_bytree=0.800, subsample=0.803, n_estimators=250)
+    gbm = lgb.LGBMRegressor(objective='rmse', max_depth=12, num_leaves=23, learning_rate=0.01, colsample_bytree=0.800, subsample=0.803, early_stopping_rounds=10, n_estimators=10000)
     print(X_train.shape, X_val.shape, min(X_val.galacticyear))
     if trend_y:
         columns=['y_trend','galaxy']

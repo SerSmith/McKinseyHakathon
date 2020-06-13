@@ -29,20 +29,22 @@ class galaxy_optim:
 
 
 
-    def __init__(self, ml_model_output, y_prob_numpy, y_numpy, max_sum_energy=50000, max_energy=100, low_existence_expectancy_treshhold=0.7, min_low_index_percent_allocation=0.1, deviation=0.165797):
+    def __init__(self, ml_model_output, y_prob_numpy, y_numpy, true_existence_expectancy_index, max_sum_energy=50000, max_energy=100, low_existence_expectancy_treshhold=0.7, min_low_index_percent_allocation=0.1, deviation=0.165797):
 
         galaxy_quant = y_prob_numpy.shape[0]
         assert galaxy_quant == ml_model_output.shape[0], "Количество наблюдений должно совпадать"
-        assert np.max((np.abs(y_prob_numpy.sum(axis=1) - np.ones(y_prob_numpy.shape[0]))))<0.000001, "Вероятности должны давать в сумме 1 для каждой галактики"
+        assert galaxy_quant == true_existence_expectancy_index.shape[0], "Количество наблюдений должно совпадать"
+        
+        assert np.max((np.abs(y_prob_numpy.sum(axis=1) - np.ones(y_prob_numpy.shape[0])))) < 0.000001, "Вероятности должны давать в сумме 1 для каждой галактики"
         assert y_numpy.shape[0] == y_prob_numpy.shape[1], "Размерность должна совпадать"
 
-        ml_model_output = self.__add_columns(ml_model_output, low_existence_expectancy_treshhold)
+        ml_model_output = self.__add_columns(ml_model_output, true_existence_expectancy_index, low_existence_expectancy_treshhold)
         
         self.probs = add_probs(y_prob_numpy, y_numpy)
         self.percents = [stats.norm((max_energy*galaxy_quant- max_sum_energy)/max_energy, np.sqrt(deviation * galaxy_quant)).cdf(x) for x in np.array(self.probs).sum(axis=0)]
         pd.DataFrame(self.percents).to_excel('percents.xlsx')
 
-        ml_model_output["percent"] = self.percents
+        ml_model_output.loc[:, "percent"] = self.percents
         self.problem_solved = False
         self.pred = ml_model_output["y"]
         self.index = ml_model_output.apply(lambda x: '_'.join([str(x["galacticyear"]), str(x["galaxy"])]), axis=1)
@@ -63,6 +65,7 @@ class galaxy_optim:
         self.m.max_energy = pe.Param(initialize=max_energy)
         # Вероятность оптимизации назначить галактике 100
         self.m.percent = pe.Param(self.m.galaxy, initialize=ml_model_output.loc[:, "percent"].to_dict())
+
 
         # bool True, если existence_expectancy меньше заданного порога
         self.m.low_existence_expectancy = pe.Param(self.m.galaxy, initialize=ml_model_output.loc[:, "low_existence_expectancy"].to_dict())
@@ -99,13 +102,14 @@ class galaxy_optim:
         # Vanila Objective function
         # self.m.OBJ = pe.Objective(rule=lambda model: sum(likely_index_increase(model, g) for g in model.galaxy), sense=pe.maximize)
         SE = lambda model, g: model.percent[g] * (model.max_energy - model.energy[g]) ** 2 + (1 - model.percent[g]) * (model.energy[g]) ** 2
+        self.SE_values = lambda model, g: model.percent[g] * (model.max_energy - model.energy[g].value) ** 2 + (1 - model.percent[g]) * (model.energy[g].value) ** 2
 
         self.m.OBJ = pe.Objective(rule=lambda model: sum(SE(model, g) for g in model.galaxy), sense=pe.minimize)
     
     @staticmethod
-    def __add_columns(ml_model_output, low_existence_expectancy_treshhold):
-        # Костыль убрать -10
-        ml_model_output["low_existence_expectancy"] = ((ml_model_output[ 'existenceexpectancyindex'] <= low_existence_expectancy_treshhold) & (ml_model_output[ 'existenceexpectancyindex'] != -10)).astype(int)
+    def __add_columns(ml_model_output, true_existence_expectancy_index, low_existence_expectancy_treshhold):
+
+        ml_model_output["low_existence_expectancy"] = list(true_existence_expectancy_index <= low_existence_expectancy_treshhold)
         ml_model_output["potential_encrease"] = ml_model_output["y"].apply(lambda x: -np.log(x + 0.01) + 3)
         return ml_model_output
 
@@ -130,8 +134,9 @@ class galaxy_optim:
         constraint_sum = ser.sum()
         energy_max = ser.max()
         energy_low_expect = np.sum(np.array(self.low_existence_expectancy) * np.array(ser).T)
+        obj = np.sqrt(np.mean([self.SE_values(self.m, g) for g in self.m.galaxy]))
         print(f"\n")
-        print(f"Целевая : {self.m.OBJ.value}\n")
+        print(f"Целевая : {obj}\n")
         print(f"Сумма по общему кол-ву : {constraint_sum}\n")
         print(f"Максимальная затраченная энергия на галактику : {energy_max}\n")
         print(f"Процент энергии на короткоживущих планетах : {energy_low_expect/constraint_sum}\n")
@@ -153,8 +158,12 @@ if __name__ == '__main__':
     with open('y_model.pkl', 'rb') as handle:
         y_model = pickle.load(handle)
 
-#     #opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model)
-    opt = galaxy_optim(test_out, y_prob_model, y_model,deviation=0.16498914930555555)
+    with open('true_existence_expectancy_index.pkl', 'rb') as handle:
+        true_existence_expectancy_index = pickle.load(handle)
+        
+
+    # opt = galaxy_optim(test_out.iloc[-50:, :], y_prob_model[-50:, :], y_model, true_existence_expectancy_index.iloc[-50:])
+    opt = galaxy_optim(test_out, y_prob_model, y_model, true_existence_expectancy_index, deviation=0.16498914930555555)
     opt.solve()
     results = opt.prepare_output_file()
     opt.check_optim_results()
