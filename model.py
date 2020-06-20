@@ -26,8 +26,8 @@ def split_train_val(df_train, df_test, percent_val, percent_drop_out):
     df_train_new = df_train_new.sample(frac=1-percent_drop_out)
     return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
 
-def train_model_interp(df_train, df_test, percent_val=0.1, y_model=None, previous_residuals=None, round_digits=None):
-    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val)
+def train_model_interp(df_train, df_test, percent_val=0.1,percent_drop_out=0.1, y_model=None, previous_residuals=None, round_digits=None):
+    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val, percent_drop_out)
     for galaxy in tqdm(df_train.galaxy.unique()):
         index = X_train[X_train.galaxy==galaxy].index
         model = interp1d(list(X_train.loc[index,'galacticyear']), list(y_train.loc[index]), kind='linear',fill_value="extrapolate")
@@ -72,8 +72,8 @@ def train_model_interp(df_train, df_test, percent_val=0.1, y_model=None, previou
 
     return y_val, predict_val, rank_diviation, predict_test
 
-def train_model_lgb(df_train, df_test, trend_y = True, percent_val=0.1, y_model=None, previous_residuals=None, round_digits=None):
-    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val)
+def train_model_lgb(df_train, df_test, trend_y = True, percent_val=0.1, percent_drop_out=0.1, y_model=None, previous_residuals=None, round_digits=None):
+    X_train, X_val, y_train, y_val = split_train_val(df_train, df_test, percent_val, percent_drop_out)
     gbm = lgb.LGBMRegressor(objective='rmse', max_depth=12, num_leaves=23, learning_rate=0.01, colsample_bytree=0.800, subsample=0.803, early_stopping_rounds=10, n_estimators=10000)
     print(X_train.shape, X_val.shape, min(X_val.galacticyear))
     if trend_y:
@@ -126,7 +126,7 @@ def train_model_lgb(df_train, df_test, trend_y = True, percent_val=0.1, y_model=
 
     return X_train, X_val, y_train, y_val, gbm, predict, rank_diviation
 
-def run_model_and_distrs_interp(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
+def run_model_and_distrs_interp(train, test, trend_y=False, percent_val=0.1, percent_drop_out=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
 
     previous_residuals = None
     residuals_all = []
@@ -138,7 +138,7 @@ def run_model_and_distrs_interp(train, test, trend_y=False, percent_val=0.1, qun
 
     y_all = np.zeros([test.shape[0], qunity_starts])
     for i in range(qunity_starts):
-        y_validate, predict, rank_diviation, y_all[:,i]  = train_model_interp(train, test, percent_val=percent_val, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
+        y_validate, predict, rank_diviation, y_all[:,i]  = train_model_interp(train, test, percent_val=percent_val, percent_drop_out=percent_drop_out, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
 
         residuals = [y - y_true for y, y_true in zip(list(y_validate), predict)]
         previous_residuals = residuals
@@ -179,7 +179,7 @@ def run_model_and_distrs_interp(train, test, trend_y=False, percent_val=0.1, qun
 
     return test, y_prob_model, y_model, rank_diviation_all
 
-def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6, percent_drop_out=0.1):
+def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, percent_drop_out=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
 
     previous_residuals = None
     residuals_all = []
@@ -191,7 +191,7 @@ def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_sta
 
     y_all = np.zeros([test.shape[0], qunity_starts])
     for i in range(qunity_starts):
-        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model_lgb(train, test, trend_y, percent_val=percent_val, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
+        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model_lgb(train, test, trend_y, percent_val=percent_val, percent_drop_out=percent_drop_out, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
 
         residuals = [y - y_true for y, y_true in zip(list(y_validate), predict)]
         previous_residuals = residuals
