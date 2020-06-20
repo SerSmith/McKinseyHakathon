@@ -103,7 +103,7 @@ class galaxy_optim:
         # Vanila Objective function
         # self.m.OBJ = pe.Objective(rule=lambda model: sum(likely_index_increase(model, g) for g in model.galaxy), sense=pe.maximize)
         SE = lambda model, g: model.percent[g] * (model.max_energy - model.energy[g]) ** 2 + (1 - model.percent[g]) * (model.energy[g]) ** 2
-        self.SE_values = lambda model, g: model.percent[g] * (model.max_energy - model.energy[g].value) ** 2 + (1 - model.percent[g]) * (model.energy[g].value) ** 2
+        self.SE_values = lambda model, g: 1000*(1-0.99*model.low_existence_expectancy[g]) * (model.percent[g] * (model.max_energy - model.energy[g].value) ** 2 + (1 - model.percent[g]) * (model.energy[g].value) ** 2)
 
         self.m.OBJ = pe.Objective(rule=lambda model: sum(SE(model, g) for g in model.galaxy), sense=pe.minimize)
     
