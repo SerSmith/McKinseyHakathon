@@ -86,7 +86,7 @@ def add_y_shift(df_train, df_test):
                 df_galactic['y_shift'].iloc[i] = df_galactic['y_shift'].iloc[i-1]
         df_train_new = pd.concat([df_train_new, df_galactic[df_galactic.train == 1].drop(['train'], axis=1)], axis=0)
         df_test_new = pd.concat([df_test_new, df_galactic[df_galactic.train == 0].drop(['train'], axis=1)], axis=0)
-    df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
+    # df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
     return df_train_new, df_test_new.drop('y', axis=1)
 
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
@@ -242,15 +242,58 @@ def add_features_from_regression(df_train, df_test):
     return df_train, df_test 
 
 
+def add_quadratic_trend(df_train, df_test):
+
+    models_dict=defaultdict(dict)
+    column = 'y'
+    for galaxy in tqdm(df_train['galaxy'].unique()):
+        index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
+        y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
+        X = df_train.loc[index_train, 'galactic year']
+        min_year = min(X)
+        max_year = max(X)
+        X_scaled = X.apply(lambda x: (10*(x-min_year)/(max_year-min_year))**2).to_numpy().reshape(-1, 1)
+        if len(y):
+            model = LinearRegression().fit(X_scaled, y)
+        else:
+            model = always_zero()
+        models_dict[galaxy] = [model, min_year, max_year]
+
+        if len(y):
+            model, min_year, max_year = models_dict[galaxy]
+            index_train = df_train[df_train.galaxy == galaxy].index
+            X_scaled = df_train.loc[index_train, 'galactic year'].apply(lambda x: (10*(x-min_year)/(max_year-min_year))**2).to_numpy().reshape(-1, 1)
+            trend = model.predict(X_scaled).reshape(-1)
+            df_train.loc[index_train,  f'quadratic_{column}'] =  trend
+
+
+
+    for galaxy in tqdm(df_train['galaxy'].unique()):
+        index_test = df_test[df_test.galaxy == galaxy].index
+        X_scaled = df_test.loc[index_test, 'galactic year'].apply(lambda x: (10*(x-min_year)/(max_year-min_year))**2).to_numpy().reshape(-1, 1)
+        if len(X_scaled):
+            model, min_year, max_year = models_dict[galaxy]
+            trend = pd.Series(model.predict(X_scaled).reshape(-1))
+            trend.index = index_test
+            df_test.loc[index_test, f'quadratic_{column}'] =  trend
+
+    return df_train, df_test 
+
+
 # Функция, которая объединяет в себе весь препроцессинг
 def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False, fill_value = -10, coeff = 0.2, num_k = 7):
     
     true_existence_expectancy_index = df_test['existence expectancy index']
 
+# Эта галактика представлена в трейне одной строчкой и отсутствует в тесте, удалим ее
+    df_train = df_train[df_train['galaxy'] != 'NGC 5253']
+
+    df_train, df_test = add_quadratic_trend(df_train, df_test)
+
     if trend_features:
         df_train, df_test, models_dict = delete_trend(df_train, df_test)
 
-    df_train, df_test = add_features_from_regression(df_train, df_test)
+    # df_train, df_test = add_features_from_regression(df_train, df_test)
     columns = [i for i in df_test.columns if i not in ['galaxy']]
 
     
