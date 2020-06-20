@@ -250,15 +250,16 @@ def add_label_from_clusterization(df_train, df_test):
     for galactic in df_train.galaxy.unique():  
         y_galaxy.append(df_train[df_train.galaxy == galactic].sort_values(['galactic year']).y.values)
     X_galaxy = to_time_series_dataset(y_galaxy)
-    km_dba = TimeSeriesKMeans(n_clusters=5, metric="dtw", max_iter=10,
+    km_dba = TimeSeriesKMeans(n_clusters=3, metric="dtw", max_iter=10,
                               max_iter_barycenter=5,
                               random_state=0).fit(X_galaxy)
     labels = list(km_dba.labels_)
     df_train['label_cluster'] = 0
     df_test['label_cluster'] = 0
-    for i, galactic in enumerate(df_train.galaxy.unique()):  
-        df_train[df_train.galaxy == galactic]['label_cluster'] = labels[i]
-        df_test[df_test.galaxy == galactic]['label_cluster'] = labels[i]
+    for i, galactic in enumerate(df_train.galaxy.unique()): 
+        print(i, labels[i], galactic)
+        df_train.loc[df_train.galaxy == galactic, 'label_cluster'] = labels[i]
+        df_test.loc[df_test.galaxy == galactic,'label_cluster'] = labels[i]
     return df_train, df_test
 
 # Функция, которая объединяет в себе весь препроцессинг
