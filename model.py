@@ -79,7 +79,7 @@ def train_model(df_train, df_test, trend_y = True, percent_val=0.1, y_model=None
     return X_train, X_val, y_train, y_val, gbm, predict, rank_diviation
 
 
-def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
+def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6, percent_drop_out=0.1):
 
     previous_residuals = None
     residuals_all = []
@@ -91,7 +91,7 @@ def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_sta
 
 
     for i in range(qunity_starts):
-        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model(train, test, trend_y, percent_val=percent_val, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits)
+        X_train, X_validate, y_train, y_validate, model_out, predict, rank_diviation  = train_model(train, test, trend_y, percent_val=percent_val, y_model=y_model, previous_residuals=previous_residuals, round_digits=round_digits, percent_drop_out=percent_drop_out)
 
         residuals = [y - y_true for y, y_true in zip(list(y_validate), predict)]
         previous_residuals = residuals
