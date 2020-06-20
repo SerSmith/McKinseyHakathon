@@ -16,13 +16,14 @@ from scipy.interpolate import interp1d
 #     df_val_new = df_train[df_train.galacticyear >= date_test_min]
 #     return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
 
-def split_train_val(df_train, df_test, percent_val):
+def split_train_val(df_train, df_test, percent_val, percent_drop_out):
     # Функция, которая честно разбивает выборку на трейн и валидацию (которая начаниется с минимального года из теста) валидация будет маленькой
     date_test_min = min(df_test.galacticyear)
     df_val = df_train[df_train.galacticyear >= date_test_min]
     k = int(df_val.shape[0] * percent_val)
     df_val_new = df_val.loc[random.sample(list(df_val.index),k)]
     df_train_new = df_train[~df_train.index.isin(df_val_new.index)]
+    df_train_new = df_train_new.sample(frac=1-percent_drop_out)
     return df_train_new.drop('y',axis=1), df_val_new.drop('y',axis=1), df_train_new['y'], df_val_new['y']
 
 def train_model_interp(df_train, df_test, percent_val=0.1, y_model=None, previous_residuals=None, round_digits=None):
@@ -178,7 +179,7 @@ def run_model_and_distrs_interp(train, test, trend_y=False, percent_val=0.1, qun
 
     return test, y_prob_model, y_model, rank_diviation_all
 
-def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6):
+def run_model_and_distrs(train, test, trend_y=False, percent_val=0.1, qunity_starts=1, quantity_points_out=100, edges_percent=0.2, round_digits=6, percent_drop_out=0.1):
 
     previous_residuals = None
     residuals_all = []

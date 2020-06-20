@@ -297,6 +297,43 @@ def add_label_from_clusterization(df_train, df_test):
         df_test.loc[df_test.galaxy == galactic,'label_cluster'] = labels[i]
     return df_train, df_test
 
+def add_male_plus_female(train, test):
+    
+    train['Life expectancy at birth, all (galactic years)'] = (train['Life expectancy at birth, male (galactic years)'] + train['Life expectancy at birth, female (galactic years)'])
+
+    train['Labour force participation rate (% ages 15 and older), all'] = (train['Labour force participation rate (% ages 15 and older), female'] + train['Labour force participation rate (% ages 15 and older), male'])
+
+    train['Mortality rate, all grown up (per 1,000 people)'] = (train['Mortality rate, female grown up (per 1,000 people)'] + train['Mortality rate, male grown up (per 1,000 people)'])
+
+    train['Intergalactic Development Index (IDI), all'] = (train['Intergalactic Development Index (IDI), male'] + train['Intergalactic Development Index (IDI), female'])
+
+    train['Population with at least some secondary education, all (% ages 25 and older)'] = (train['Population with at least some secondary education, male (% ages 25 and older)'] + train['Population with at least some secondary education, female (% ages 25 and older)'])
+
+    train['Estimated gross galactic income per capita, all'] = (train['Estimated gross galactic income per capita, male'] + train['Estimated gross galactic income per capita, female'])
+
+    train['Expected years of education, all (galactic years)'] = (train['Expected years of education, male (galactic years)'] + train['Expected years of education, female (galactic years)'])
+
+    train['Mean years of education, all (galactic years)'] = (train['Mean years of education, male (galactic years)'] + train['Mean years of education, female (galactic years)'])
+
+
+    test['Life expectancy at birth, all (galactic years)'] = (test['Life expectancy at birth, male (galactic years)'] + test['Life expectancy at birth, female (galactic years)'])
+
+    test['Labour force participation rate (% ages 15 and older), all'] = (test['Labour force participation rate (% ages 15 and older), female'] + test['Labour force participation rate (% ages 15 and older), male'])
+
+    test['Mortality rate, all grown up (per 1,000 people)'] = (test['Mortality rate, female grown up (per 1,000 people)'] + test['Mortality rate, male grown up (per 1,000 people)'])
+
+    test['Intergalactic Development Index (IDI), all'] = (test['Intergalactic Development Index (IDI), male'] + test['Intergalactic Development Index (IDI), female'])
+
+    test['Population with at least some secondary education, all (% ages 25 and older)'] = (test['Population with at least some secondary education, male (% ages 25 and older)'] + test['Population with at least some secondary education, female (% ages 25 and older)'])
+
+    test['Estimated gross galactic income per capita, all'] = (test['Estimated gross galactic income per capita, male'] + test['Estimated gross galactic income per capita, female'])
+
+    test['Expected years of education, all (galactic years)'] = (test['Expected years of education, male (galactic years)'] + test['Expected years of education, female (galactic years)'])
+
+    test['Mean years of education, all (galactic years)'] = (test['Mean years of education, male (galactic years)'] + test['Mean years of education, female (galactic years)'])
+
+    return train, test
+
 # Функция, которая объединяет в себе весь препроцессинг
 def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False, fill_value = -10, coeff = 0.2, num_k = 7):
     
@@ -360,6 +397,8 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
     df_train.sort_index(inplace=True)
     
     df_train, df_test = fillna(df_train, df_test, columns, fill_value)
+
+    df_train, df_test = add_male_plus_female(df_train, df_test)
     
     df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
     df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
