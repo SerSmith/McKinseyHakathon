@@ -31,7 +31,7 @@ class galaxy_optim:
 
     def __init__(self, ml_model, y_prob_numpy, y_numpy, true_existence_expectancy_index, max_sum_energy=50000, max_energy=100, low_existence_expectancy_treshhold=0.7, min_low_index_percent_allocation=0.1, deviation=0.165797):
         
-        ml_model_output = ml_model_output.copy(deep=True)
+        ml_model_output = ml_model.copy(deep=True)
         galaxy_quant = y_prob_numpy.shape[0]
         assert galaxy_quant == ml_model_output.shape[0], "Количество наблюдений должно совпадать"
         assert galaxy_quant == true_existence_expectancy_index.shape[0], "Количество наблюдений должно совпадать"
