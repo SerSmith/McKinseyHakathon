@@ -35,6 +35,8 @@ def preprocessing_add_epoch_statistics(train, test):
     train = train.loc[:, list(test.columns) + ['y']]
     return train, test
 
+    
+
 def delete_trend(df_train, df_test):
     models_dict=defaultdict(dict)
     for column in tqdm(df_train.columns):
@@ -68,7 +70,21 @@ def delete_trend(df_train, df_test):
         
     return df_train, df_test, models_dict
 
-
+def add_label_from_clusterization(df_train, df_test):
+    y_galaxy = []
+    for galactic in df_train.galaxy.unique():  
+        y_galaxy.append(df_train[df_train.galaxy == galactic].sort_values(['galactic year']).y.values)
+    X_galaxy = to_time_series_dataset(y_galaxy)
+    km_dba = TimeSeriesKMeans(n_clusters=5, metric="dtw", max_iter=10,
+                              max_iter_barycenter=5,
+                              random_state=0).fit(X_galaxy)
+    labels = list(km_dba.labels_)
+    df_train['label_cluster'] = 0
+    df_test['label_cluster'] = 0
+    for i, galactic in enumerate(df_train.galaxy.unique()):  
+        df_train[df_train.galaxy == galactic]['label_cluster'] = labels[i]
+        df_test[df_test.galaxy == galactic]['label_cluster'] = labels[i]
+    return df_train, df_test
 
 
 def add_y_shift(df_train, df_test):
