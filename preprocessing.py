@@ -7,6 +7,7 @@ from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
 from collections import defaultdict
 from scipy.interpolate import interp1d
+from tslearn.clustering import TimeSeriesKMeans, to_time_series_dataset
 
 class always_zero:
     '''Класс - заглушка, возвращающая всегда 0
@@ -77,7 +78,7 @@ def add_y_shift(df_train, df_test):
     df_test['train'] = 0
     df_all = pd.concat([df_train,df_test])
     for galactic in df_train.galaxy.unique():  
-        df_galactic = df_all[df_all.galaxy == galactic].sort_values(['galacticyear']).copy()
+        df_galactic = df_all[df_all.galaxy == galactic].sort_values(['galactic year']).copy()
         df_galactic = pd.concat([df_galactic, df_galactic['y'].shift(1)], axis=1)
         df_galactic.columns = list(df_all.columns) + ['y_shift']
         df_galactic['y_shift'].iloc[0] = np.mean(df_galactic.y_shift)
@@ -86,7 +87,7 @@ def add_y_shift(df_train, df_test):
                 df_galactic['y_shift'].iloc[i] = df_galactic['y_shift'].iloc[i-1]
         df_train_new = pd.concat([df_train_new, df_galactic[df_galactic.train == 1].drop(['train'], axis=1)], axis=0)
         df_test_new = pd.concat([df_test_new, df_galactic[df_galactic.train == 0].drop(['train'], axis=1)], axis=0)
-    df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0]
+    df_train_new.loc[df_train_new.galaxy=='NGC 5253','y_shift'] = df_train_new[df_train_new.galaxy=='NGC 5253']['y'].iloc[0] # Выделила отдельно галактику, так как по ней всего 1 строчка
     return df_train_new, df_test_new.drop('y', axis=1)
 
 def my_add_feature(df_train, df_test, columns, fill_value, coef, num_k):
@@ -197,50 +198,68 @@ def fillna(df_train, df_test, columns, value):
 def add_features_from_regression(df_train, df_test):
     models_dict=defaultdict(dict)
     column = 'y'
-    for column in tqdm(df_train.columns):
-        df_train[f'regres_{column}'] =  0
-        df_train[f'coef_regr_{column}'] = 0
-        df_train[f'inter_regr__{column}'] = 0
-        if column not in ['galactic year', 'galaxy']:
-            for galaxy in df_train['galaxy'].unique():
-                index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
-                y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
-                X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
-                df_train.loc[index_train, 'regression_y'] = np.mean(y)
-                if len(y):
-                    model = LinearRegression().fit(X, y)
-                else:
-                    model = always_zero()
+    df_train[f'regres_{column}'] =  0
+    df_train[f'coef_regr_{column}'] = 0
+    df_train[f'inter_regr__{column}'] = 0
+#     for column in tqdm(df_train.columns):
+#         df_train[f'regres_{column}'] =  0
+#         df_train[f'coef_regr_{column}'] = 0
+#         df_train[f'inter_regr__{column}'] = 0
+#         if column not in ['galactic year', 'galaxy']:
+    for galaxy in df_train['galaxy'].unique():
+        index_train = df_train[(df_train.galaxy == galaxy) & (df_train[column].notnull())].index
+        y = df_train.loc[index_train, column].to_numpy().reshape(-1, 1)
+        X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
+        if len(y):
+            model = LinearRegression().fit(X, y)
+        else:
+            model = always_zero()
 
-                models_dict[galaxy] = model
+        models_dict[galaxy] = model
 
-                if len(y):
-                    index_train = df_train[df_train.galaxy == galaxy].index
-                    X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
-                    trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
-                    trend.index = index_train
-                    df_train.loc[index_train, f'regres_{column}'] =  trend
-                    df_train.loc[index_train, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000
-                    df_train.loc[index_train, f'inter_regr_{column}'] = models_dict[galaxy].intercept_[0]
+        if len(y):
+            index_train = df_train[df_train.galaxy == galaxy].index
+            X = df_train.loc[index_train, 'galactic year'].to_numpy().reshape(-1, 1)
+            trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
+            trend.index = index_train
+            df_train.loc[index_train, f'regres_{column}'] =  trend
+            df_train.loc[index_train, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000 # Добавили умножение на 100000, чтобы число было не слишком маленьким
+            df_train.loc[index_train, f'inter_regr_{column}'] = models_dict[galaxy].intercept_[0]
 
 
 
-    for column in tqdm(df_test.columns):
-        df_test[f'regres_{column}'] =  0
-        df_test[f'coef_regr_{column}'] = 0
-        df_test[f'inter_regr__{column}'] = 0
-        if column not in ['galactic year', 'galaxy']:
-            for galaxy in df_train['galaxy'].unique():
-                index_test = df_test[df_test.galaxy == galaxy].index
-                X = df_test.loc[index_test, 'galactic year'].to_numpy().reshape(-1, 1)
-                if len(X):
-                    trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
-                    trend.index = index_test
-                    df_test.loc[index_test, f'regres_{column}'] =  trend
-                    df_test.loc[index_test, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000
-                    df_test.loc[index_test, f'inter_regr__{column}'] = models_dict[galaxy].intercept_[0]
+#     for column in tqdm(df_test.columns):
+#         df_test[f'regres_{column}'] =  0
+#         df_test[f'coef_regr_{column}'] = 0
+#         df_test[f'inter_regr__{column}'] = 0
+#         if column not in ['galactic year', 'galaxy']:
+    for galaxy in df_train['galaxy'].unique():
+        index_test = df_test[df_test.galaxy == galaxy].index
+        X = df_test.loc[index_test, 'galactic year'].to_numpy().reshape(-1, 1)
+        if len(X):
+            trend = pd.Series(models_dict[galaxy].predict(X).reshape(-1))
+            trend.index = index_test
+            df_test.loc[index_test, f'regres_{column}'] =  trend
+            df_test.loc[index_test, f'coef_regr_{column}'] = models_dict[galaxy].coef_[0][0]*1000000
+            df_test.loc[index_test, f'inter_regr__{column}'] = models_dict[galaxy].intercept_[0]
     return df_train, df_test 
 
+
+def add_label_from_clusterization(df_train, df_test):
+    y_galaxy = []
+    for galactic in df_train.galaxy.unique():  
+        y_galaxy.append(df_train[df_train.galaxy == galactic].sort_values(['galactic year']).y.values)
+    X_galaxy = to_time_series_dataset(y_galaxy)
+    km_dba = TimeSeriesKMeans(n_clusters=5, metric="dtw", max_iter=10,
+                              max_iter_barycenter=5,
+                              random_state=0).fit(X_galaxy)
+    labels = list(km_dba.labels_)
+    df_train['label_cluster'] = 0
+    df_test['label_cluster'] = 0
+    for i, galactic in enumerate(df_train.galaxy.unique()):  
+        df_train[df_train.galaxy == galactic]['label_cluster'] = labels[i]
+        df_test[df_test.galaxy == galactic]['label_cluster'] = labels[i]
+    return df_train, df_test
 
 # Функция, которая объединяет в себе весь препроцессинг
 def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False, fill_value = -10, coeff = 0.2, num_k = 7):
@@ -252,8 +271,7 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
 
     df_train, df_test = add_features_from_regression(df_train, df_test)
     columns = [i for i in df_test.columns if i not in ['galaxy']]
-
-    
+    df_train, df_test = add_label_from_clusterization(df_train, df_test)   
 
     galaxy_train = df_train['galaxy'].unique()
     galaxy_test = df_test['galaxy'].unique()
@@ -275,7 +293,6 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
 
 
     df_train, df_test = preprocessing_add_epoch_statistics(df_train, df_test)
-    df_train, df_test = fillna(df_train, df_test, columns, fill_value)
 
     if trend_y:
         column = 'y'
@@ -295,8 +312,7 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
             trend.index = index_test
             df_test.loc[index_test, 'y_trend'] = trend
 
-    df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
-    df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
+
 
     df_train, df_test = add_y_shift(df_train, df_test)
     
@@ -304,6 +320,9 @@ def preprocessing_all(df_train, df_test, trend_features = False, trend_y = False
     df_train.sort_index(inplace=True)
     
     df_train, df_test = fillna(df_train, df_test, columns, fill_value)
+    
+    df_train = df_train.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
+    df_test = df_test.rename(columns = lambda x:re.sub('[^A-Za-z0-9_]+', '', str(x)))
 
     return df_train, df_test, true_existence_expectancy_index
 
